@@ -5,7 +5,7 @@ from skimage.feature import hog
 from itertools import izip
 from sklearn.svm import LinearSVC
 
-__author__ == 'Quentin Jeanmonod'
+__author__ = 'Quentin Jeanmonod'
 
 
 # holder
