@@ -17,17 +17,11 @@ def loadimage(imagepath, zone=[177, 191, 175, 208]):
 
 
 def findthesymbol(image, zone):
+
     imageinzone = image[zone[0]:zone[1], zone[2]:zone[3]]
-    """edges = cv2.Canny(imageinzone, 100, 170)
-    pyplot.subplot(121), pyplot.imshow(imageinzone, cmap='gray')
-    pyplot.title('magic Card'), pyplot.xticks([]), pyplot.yticks([])
-    res = cv2.resize(imageinzone, None, fx=25/17, fy=25/17, interpolation=cv2.INTER_CUBIC)
-    pyplot.subplot(122), pyplot.imshow(res, cmap='gray')
-    pyplot.title('resolution'), pyplot.xticks([]), pyplot.yticks([])
-    pyplot.subplot(122), pyplot.imshow(edges, cmap='gray')
-    pyplot.title('Edgy'), pyplot.xticks([]), pyplot.yticks([])
-    pyplot.show()"""
-    return compareextensionsymboltoothersymbols(imageinzone)
+    imageingrayzone = cv2.cvtColor(imageinzone, cv2.COLOR_BGR2GRAY)
+    graymage = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    return compareextensionsymboltoothersymbols(graymage)
 
 
 def compareextensionsymboltoothersymbols(imageinzone):
@@ -43,7 +37,8 @@ def compareextensionsymboltoothersymbols(imageinzone):
         for f in listdir(extensionpath):
             if isfile(join(extensionpath, f)):
                 extension = cv2.imread(join(extensionpath, f))
-                tempresult = compareoneonone(imageinzone, extension)
+                grayxtension = cv2.cvtColor(extension, cv2.COLOR_BGR2GRAY)
+                tempresult = compareoneonone(imageinzone, grayxtension)
                 if tempresult > result:
                     result = tempresult
                     resultname = f.split(str=".")[0]
@@ -59,30 +54,40 @@ def compareextensionsymboltoothersymbols(imageinzone):
 
 
 def compareoneonone(imagetoprocess, extensionimage):
-
     # this is the comparison between the zone and the source extension image. re-scaling of expansion file done here
-    # TODO : function that compare and tell "CORRECT PIXELS"
-    bestcorrespondancevalidpixels = 1
-    # TODO : function that compare and tell "WRONG PIXELS"
-    lesserrorcorrespondance = 12
-    return bestcorrespondancevalidpixels - lesserrorcorrespondance
+    # why doesn't ORB works ?
+    # workaround ? Yup, it worked
+    cv2.ocl.setUseOpenCL(False)
+    orb = cv2.ORB_create()
+    kp1, des1 = orb.detectAndCompute(extensionimage, None)
+    kp2, des2 = orb.detectAndCompute(extensionimage, None)
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING2, crossCheck=True)
+    print(bf)
+    matches = bf.match(des1, des2)
+    matches = sorted(matches, key=lambda x: x.distance)
+    print len(matches)
+    # result = cv2.drawMatches(extensionimage, kp1, extensionimage, kp2, matches[:10], None, flags=2)
+    # pyplot.imshow(result), pyplot.show()
+
+    return len(matches)
 
 
-# load file here, and search for the 3d element in each line
 def convertnumbertoname(name):
-    print(name)
     fileopened = open("./extensionNames.txt", 'r')
     for line in fileopened:
-        if name in line[0] and line[2] is not None:
-            return line[2]
+        if name in line.split()[0] and line.split()[2] is not None:
+            return line.split()[2]
     return "NOT_OLD_EXTENSION"
+
+
+def martinpart(pathtoimage):
+    print loadimage(pathtoimage)
 
 
 if __name__ == "__main__":
     from sys import argv
-    # TODO : SYS ARGS
     if argv.__len__() == 2:
         print(loadimage(argv[1]))
     else:
-        print(loadimage("testImages/whiteUnco.png"))
+        print(loadimage("testImages/whiteCommon.jpg"))
 
