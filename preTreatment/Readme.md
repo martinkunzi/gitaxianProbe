@@ -7,3 +7,5 @@ It should be able to
 --> straigthen the card 
 
 it will return an image composed only of the calibrated card
+
+use it with "prethreat.py image.jpg"
