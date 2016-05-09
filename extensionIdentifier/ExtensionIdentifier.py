@@ -3,17 +3,19 @@ import cv2
 import numpy
 from matplotlib import pyplot
 
+__author__ = "Martin Kunzi"
 
-def loadimage(imagepath, zone=[177, 192, 175, 209]):
+
+def loadimage(imagepath):
     # this part of the function tells us if we have a card, and call for the next part
     img = cv2.imread(imagepath)
     if img is not None:
-        return findthesymbol(img, zone)
+        return pickazone(img)
     else:
         return "NOT AN IMAGE"
 
 
-def findthesymbol(image, zone):
+def pickazone(image, zone=[177, 192, 175, 209]):
     return compareextensionsymboltoothersymbols(image[zone[0]:zone[1], zone[2]:zone[3]])
 
 
@@ -59,16 +61,11 @@ def converttorarity(rarity):
 
 
 def compareoneonone(imagetoprocess, extensionimage):
-    # this is the comparison between the zone and the source extension image. re-scaling of expansion file done here
-    # why doesn't ORB works ?
-    # workaround ? Yup, it worked
     cv2.ocl.setUseOpenCL(False)
     orb = cv2.ORB_create(500, 1.6, 8, 1, 0, 2, 0, 31)
-
     kp1, des1 = orb.detectAndCompute(imagetoprocess, None)
     kp2, des2 = orb.detectAndCompute(extensionimage, None)
     bf = cv2.BFMatcher(cv2.NORM_HAMMING2, crossCheck=True)
-
     matches = bf.match(des1, des2)
     matches = sorted(matches, key=lambda x: x.distance)
     datsum = 0
@@ -93,8 +90,8 @@ def convertnumbertoname(name):
     return "NOT_OLD_EXTENSION"
 
 
-def martinpart(pathtoimage):
-    print loadimage(pathtoimage)
+def martinpart(image):
+    print pickazone(image)
 
 
 if __name__ == "__main__":
