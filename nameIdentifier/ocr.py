@@ -4,6 +4,7 @@ from sklearn.externals import joblib
 from skimage.feature import hog
 from itertools import izip
 from sklearn.svm import LinearSVC
+import sys
 
 __author__ = 'Quentin Jeanmonod'
 
@@ -27,7 +28,7 @@ def findletters(img):
     # make img bigger for better thinging
     img = cv2.resize(img, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    # gray = cv2.GaussianBlur(gray, (5, 5), 0)
+    # gray = cv2.GaussianBlur(gray, (3, 3), 0)
     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     kernel = np.ones((2, 2), np.uint8)
     # erosion (i don't know why dilate make it erode tho) to separate letters
@@ -43,15 +44,15 @@ def findletters(img):
         x, y, w, h = cv2.boundingRect(c)
         cv2.rectangle(img, (x, y), (x + w, y + h), (255, 0, 0), 1)
         # ignoring small or huge things like the entire image
-        if w < 5 or h < 10 or w > 50:
+        if w < 5 or h < 10 or w > 50 or h > 50:
             continue
         letters.append(Letter(thresh, x, y, w, h))
         cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 1)
-        
+
     # sorting the letter in order and creating a cleaned up list
     letters.sort(key=lambda l: l.x)
     newletters = []
-    old = Letter(None, 0, 0, 0, 0)
+    old = Letter(None, letters[0].x - 1, 0, 0, 0) # starting just before first letter for transform cards)
     for l in letters:
         # too much space => we finished reading the card name
         if l.x - old.x - old.w > 50:
@@ -62,6 +63,7 @@ def findletters(img):
             if l.x - old.x - old.w > 10:
                 newletters.append(Letter(thresh, old.x + old.w, 10, l.x - old.x - old.w, 30))
             # if the letter is huge, we probably have 2 of them and can cut in the middle
+            # don't know how to detect 3
             if l.w > 35:
                 newletters.append(Letter(thresh, l.x, l.y, l.w / 2, l.h))
                 newletters.append(Letter(thresh, l.x + l.w / 2, l.y, l.w / 2, l.h))
@@ -69,7 +71,7 @@ def findletters(img):
                 newletters.append(l)
             old = newletters[-1]
     
-    # adding border so that all letters are the same size
+    # adding border so that all letters are the same size for classification
     maxx = 50
     maxy = 50
     for i, l in enumerate(newletters):
@@ -79,11 +81,11 @@ def findletters(img):
         marginy = dify / 2
         l.img = cv2.copyMakeBorder(l.img, marginy, marginy + dify % 2, marginx, marginx + difx % 2, cv2.BORDER_CONSTANT, value=255)
 
-    # rectangles on letters, for debug
+    # rectangles on letters, for debug and example
     for l in newletters:
         cv2.rectangle(img, (l.x, l.y), (l.x + l.w, l.y + l.h), (0, 0, 255), 1)
     
-    return newletters, img
+    return newletters, img, thresh
 
 
 def train():
@@ -114,7 +116,7 @@ def train():
         # if something goes wrong with the image or the length of the name
         # is not the same as the number of letters detected, we skip that card
         try:
-            curimages, _ = findletters(img)
+            curimages, _, _ = findletters(img)
             if len(curimages) != len(name):
                 defect += 1
                 continue
@@ -126,7 +128,7 @@ def train():
     
     print('Training done, {} cards could not be read. {} % of cards successfully used for training.'.format(defect, defect * 100 / len(cards)))
     
-    # training the classifier
+    # training the classifier with histogram of gradients
     labels = []
     hogs = []
     for c, l in izip(letters, images):
@@ -141,8 +143,14 @@ def train():
     return clf
 
 
-def classify(img, clf):
-    letters, _ = findletters(img)
+def classify(img, clf=None):
+    if not clf:
+        try:
+            clf = joblib.load("cls.pkl")
+        except:
+            raise FileNotFoundException('Could not find classifier')
+    
+    letters, _, _ = findletters(img)
     detected = []
     for l in letters:
         roi_hog_fd = hog(l.img, orientations=9, pixels_per_cell=(14, 14), cells_per_block=(1, 1), visualise=False)
@@ -155,13 +163,14 @@ def test(clf):
     import json
     import urllib2
     import tqdm
+    import difflib
     
     url = 'http://gatherer.wizards.com/Handlers/Image.ashx?multiverseid={}&type=card'
     
     with open('AllSets.json', 'r') as file:
         sets = json.loads(file.read())
         cards = sets['C15']['cards']
-    
+        
     names = []
     detecteds = []
         
@@ -178,10 +187,22 @@ def test(clf):
         detecteds.append(detected)
         names.append(name)
     
+    # counting errors
     cardsum = len(names)
     cardsumcool = sum(1 if a == b else 0 for a, b in izip(names, detecteds))
     lettersum = sum(len(a) for a in names)
-    lettersumcool = sum(sum(1 if a == b else 0 for a, b in izip(name, detected)) for name, detected in izip(names, detecteds))
+    lettersumcool = lettersum
+    for name, detected in izip(names, detecteds):
+        add = 0
+        sup = 0
+        for s in difflib.ndiff(name, detected):
+            if s[0] == ' ':
+                continue
+            elif s[0] == '-':
+                sup += 1
+            elif s[0] == '+':
+                add += 1
+        lettersumcool -= sup + (add - sup)
     
     print('Checked {} cards'.format(cardsum))
     print('Estimated precision:')
@@ -190,8 +211,8 @@ def test(clf):
 
 
 def example(clf):
-    paths = ['grasp.jpg', 'bastion.jpg', 'dawnbreak.jpg', 'herald.jpg']
-    names = ['Grasp of Fate', 'Bastion Protector', 'Dawnbreak Reclaimer', 'Herald of the Host']
+    paths = ['grasp.jpg', 'bastion.jpg', 'dawnbreak.jpg', 'herald.jpg', 'jace_origin_mythic.png', 'languishjpg.jpg']
+    names = ['Grasp of Fate', 'Bastion Protector', 'Dawnbreak Reclaimer', 'Herald of the Host', "Jace, Prodige de Vryn", 'Languish']
     
     for name, path in izip(names, paths):
         img = cv2.imread(path)
@@ -199,17 +220,41 @@ def example(clf):
         detected = classify(img, clf)
         print(name)
         print(detected)
-        letters, img = findletters(img)
+        letters, img, thresh = findletters(img)
         for c, l in izip(detected, letters):
-            cv2.putText(img, c, (l.x, l.y + l.h),cv2.FONT_HERSHEY_DUPLEX, 1, (0, 255, 255), 1)
+            cv2.putText(img, c, (l.x, l.y + l.h),cv2.FONT_HERSHEY_DUPLEX, 1, (0, 255, 255), 2)
+            
+        # making one big image instead of having dozens of small ones
+        img = np.vstack((img, cv2.cvtColor(thresh[2:-2, 2:-2], cv2.COLOR_GRAY2BGR)))
+        
+        hogs = letters[0].img
+        for l in letters[1:]:
+            hogs = np.hstack((hogs, l.img))
+        hogs = cv2.cvtColor(hogs, cv2.COLOR_GRAY2BGR)
+
+        if img.shape[1] > hogs.shape[1]:
+            hogs = np.hstack((hogs, np.zeros((hogs.shape[0], img.shape[1] - hogs.shape[1], 3), np.uint8)))
+        else:
+            img = np.hstack((img, np.zeros((img.shape[0], hogs.shape[1] - img.shape[1], 3), np.uint8)))
+        
+        img = np.vstack((img, hogs))
+        
         cv2.imshow('{}'.format(path), img)
+    
+    letters = findletters(cv2.imread(paths[0]))[0]
     
     cv2.waitKey()
     
     
 if __name__ == '__main__':
-    # clf = train()
-    clf = joblib.load("cls.pkl")
-    
-    # test(clf)
-    example(clf)
+    if len(sys.argv) > 1:
+        if sys.argv[1] == 'train':
+            clf = train()
+        elif sys.argv[1] == 'test':
+            clf = joblib.load("cls.pkl") 
+            test(clf)
+        else:
+            print('Argument {} not recognized, use train or test'.format(sys.argv[1]))
+    else:
+        clf = joblib.load("cls.pkl") 
+        example(clf)
