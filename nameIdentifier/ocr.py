@@ -126,7 +126,7 @@ def train():
             defect += 1
             pass
     
-    print('Training done, {} cards could not be read. {} % of cards successfully used for training.'.format(defect, defect * 100 / len(cards)))
+    print('Training done, {} cards could not be read. {} % of cards successfully used for training.'.format(defect, (len(cards) - defect) * 100 / len(cards)))
     
     # training the classifier with histogram of gradients
     labels = []
