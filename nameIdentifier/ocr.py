@@ -209,40 +209,41 @@ def test(clf):
     print('{} / {} ({} %) cards correct'.format(cardsumcool, cardsum, cardsumcool * 100 / cardsum))
     print('{} / {} ({} %) letters correct'.format(lettersumcool, lettersum, lettersumcool * 100 / lettersum))
 
+    
+def examplecard(img, clf):
+    detected = classify(img, clf)
+    print(detected)
+    letters, img, thresh = findletters(img)
+    for c, l in izip(detected, letters):
+        cv2.putText(img, c, (l.x, l.y + l.h),cv2.FONT_HERSHEY_DUPLEX, 1, (0, 255, 255), 2)
+        
+    # making one big image instead of having dozens of small ones
+    img = np.vstack((img, cv2.cvtColor(thresh[2:-2, 2:-2], cv2.COLOR_GRAY2BGR)))
+    
+    hogs = letters[0].img
+    for l in letters[1:]:
+        hogs = np.hstack((hogs, l.img))
+    hogs = cv2.cvtColor(hogs, cv2.COLOR_GRAY2BGR)
 
+    if img.shape[1] > hogs.shape[1]:
+        hogs = np.hstack((hogs, np.zeros((hogs.shape[0], img.shape[1] - hogs.shape[1], 3), np.uint8)))
+    else:
+        img = np.hstack((img, np.zeros((img.shape[0], hogs.shape[1] - img.shape[1], 3), np.uint8)))
+    
+    img = np.vstack((img, hogs))
+    
+    cv2.imshow('{}'.format(detected), img)
+    
+    
 def example(clf):
     paths = ['grasp.jpg', 'bastion.jpg', 'dawnbreak.jpg', 'herald.jpg', 'jace_origin_mythic.png', 'languishjpg.jpg']
     names = ['Grasp of Fate', 'Bastion Protector', 'Dawnbreak Reclaimer', 'Herald of the Host', "Jace, Prodige de Vryn", 'Languish']
     
     for name, path in izip(names, paths):
         img = cv2.imread(path)
-    
-        detected = classify(img, clf)
         print(name)
-        print(detected)
-        letters, img, thresh = findletters(img)
-        for c, l in izip(detected, letters):
-            cv2.putText(img, c, (l.x, l.y + l.h),cv2.FONT_HERSHEY_DUPLEX, 1, (0, 255, 255), 2)
-            
-        # making one big image instead of having dozens of small ones
-        img = np.vstack((img, cv2.cvtColor(thresh[2:-2, 2:-2], cv2.COLOR_GRAY2BGR)))
+        examplecard(img, clf)
         
-        hogs = letters[0].img
-        for l in letters[1:]:
-            hogs = np.hstack((hogs, l.img))
-        hogs = cv2.cvtColor(hogs, cv2.COLOR_GRAY2BGR)
-
-        if img.shape[1] > hogs.shape[1]:
-            hogs = np.hstack((hogs, np.zeros((hogs.shape[0], img.shape[1] - hogs.shape[1], 3), np.uint8)))
-        else:
-            img = np.hstack((img, np.zeros((img.shape[0], hogs.shape[1] - img.shape[1], 3), np.uint8)))
-        
-        img = np.vstack((img, hogs))
-        
-        cv2.imshow('{}'.format(path), img)
-    
-    letters = findletters(cv2.imread(paths[0]))[0]
-    
     cv2.waitKey()
     
     
