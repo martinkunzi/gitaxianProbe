@@ -39,7 +39,12 @@ def findletters(img):
     letters = []
 
     # fiddling with contours to find the letters
-    contours, _ = cv2.findContours(thresh.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    try:
+        contours, _ = cv2.findContours(thresh.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    except ValueError:
+        # opencv 3.1 compatibility
+        _, contours, _ = cv2.findContours(thresh.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        
     for c in contours:
         x, y, w, h = cv2.boundingRect(c)
         cv2.rectangle(img, (x, y), (x + w, y + h), (255, 0, 0), 1)
